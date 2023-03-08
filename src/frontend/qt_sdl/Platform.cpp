@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include <string>
+#include <thread>
 #include <QStandardPaths>
 #include <QString>
 #include <QDir>
@@ -34,9 +35,15 @@
 #include "Config.h"
 #include "ROMManager.h"
 #include "CameraManager.h"
+#ifdef HAVE_LIBSLIRP
 #include "LAN_Socket.h"
+#endif
 #include "LAN_PCap.h"
 #include "LocalMP.h"
+
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
 
 
 std::string EmuDirectory;
@@ -315,7 +322,11 @@ FILE* OpenFile(std::string path, std::string mode, bool mustexist)
         qmode = QIODevice::OpenModeFlag::ReadOnly;
     }
 
-    f.open(qmode);
+    if (!f.open(qmode))
+    {
+        return nullptr;
+    }
+
     FILE* file = fdopen(dup(f.handle()), mode.c_str());
     f.close();
 
@@ -351,21 +362,20 @@ FILE* OpenLocalFile(std::string path, std::string mode)
 
 Thread* Thread_Create(std::function<void()> func)
 {
-    QThread* t = QThread::create(func);
-    t->start();
+    std::thread* t = new std::thread(func);
     return (Thread*) t;
 }
 
 void Thread_Free(Thread* thread)
 {
-    QThread* t = (QThread*) thread;
-    t->terminate();
+    std::thread* t = (std::thread*) thread;
+    t->detach();
     delete t;
 }
 
 void Thread_Wait(Thread* thread)
 {
-    ((QThread*) thread)->wait();
+    ((std::thread*) thread)->join();
 }
 
 Semaphore* Semaphore_Create()
@@ -417,7 +427,7 @@ void Mutex_Unlock(Mutex* mutex)
 
 bool Mutex_TryLock(Mutex* mutex)
 {
-    return ((QMutex*) mutex)->try_lock();
+    return ((QMutex*) mutex)->tryLock();
 }
 
 void Sleep(u64 usecs)
@@ -495,6 +505,7 @@ u16 MP_RecvReplies(u8* data, u64 timestamp, u16 aidmask)
     return LocalMP::RecvReplies(data, timestamp, aidmask);
 }
 
+#ifdef HAVE_LIBSLIRP
 bool LAN_Init()
 {
     if (Config::DirectLAN)
@@ -510,6 +521,12 @@ bool LAN_Init()
 
     return true;
 }
+#else
+bool LAN_Init()
+{
+    return LAN_PCap::Init(true);
+}
+#endif
 
 void LAN_DeInit()
 {
@@ -519,9 +536,12 @@ void LAN_DeInit()
     //else
     //    LAN_Socket::DeInit();
     LAN_PCap::DeInit();
+#ifdef HAVE_LIBSLIRP
     LAN_Socket::DeInit();
+#endif
 }
 
+#ifdef HAVE_LIBSLIRP
 int LAN_SendPacket(u8* data, int len)
 {
     if (Config::DirectLAN)
@@ -537,6 +557,17 @@ int LAN_RecvPacket(u8* data)
     else
         return LAN_Socket::RecvPacket(data);
 }
+#else
+int LAN_SendPacket(u8* data, int len)
+{
+    return LAN_PCap::SendPacket(data, len);
+}
+
+int LAN_RecvPacket(u8* data)
+{
+    return LAN_PCap::RecvPacket(data);
+}
+#endif
 
 
 void Camera_Start(int num)

@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <algorithm>
 #include "NDS.h"
 #include "GBACart.h"
 #include "CRC32.h"

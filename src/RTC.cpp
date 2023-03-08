@@ -24,6 +24,10 @@
 #include <time.h>
 #include "RTC.h"
 
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
+
 
 namespace RTC
 {

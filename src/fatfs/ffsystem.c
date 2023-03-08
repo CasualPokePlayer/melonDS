@@ -9,6 +9,10 @@
 
 #include "ff.h"
 
+#ifdef _MSC_VER
+#include "../MSVC_Compat.h"
+#endif
+
 
 #if FF_USE_LFN == 3	/* Dynamic memory allocation */
 

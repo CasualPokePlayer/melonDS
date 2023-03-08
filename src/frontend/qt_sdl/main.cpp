@@ -50,6 +50,11 @@
 #endif
 #endif
 
+#ifdef _WIN32
+#include <QtPlugin>
+Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
+#endif
+
 #include <SDL2/SDL.h>
 
 #include "OpenGLSupport.h"
@@ -94,10 +99,16 @@
 #include "main_shaders.h"
 
 #include "ROMManager.h"
+#ifdef ARCHIVE_SUPPORT_ENABLED
 #include "ArchiveUtil.h"
+#endif
 #include "CameraManager.h"
 
 #include "CLI.h"
+
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
 
 // TODO: uniform variable spelling
 
@@ -452,6 +463,7 @@ void EmuThread::updateScreenSettings(bool filter, const WindowInfo& windowInfo, 
     screenSettingsLock.unlock();
 }
 
+#ifdef OGLRENDERER_ENABLED
 void EmuThread::initOpenGL()
 {
     GL::Context* windowctx = mainWindow->getOGLContext();
@@ -540,6 +552,7 @@ void EmuThread::deinitOpenGL()
 
     lastScreenWidth = lastScreenHeight = -1;
 }
+#endif
 
 void EmuThread::run()
 {
@@ -557,12 +570,14 @@ void EmuThread::run()
     videoSettings.GL_ScaleFactor = Config::GL_ScaleFactor;
     videoSettings.GL_BetterPolygons = Config::GL_BetterPolygons;
 
+#ifdef OGLRENDERER_ENABLED
     if (mainWindow->hasOGL)
     {
         initOpenGL();
         videoRenderer = Config::_3DRenderer;
     }
     else
+#endif
     {
         videoRenderer = 0;
     }
@@ -823,6 +838,7 @@ void EmuThread::run()
             if (oglContext)
                 drawScreenGL();
 
+#ifdef OGLRENDERER_ENABLED
             int contextRequest = ContextRequest;
             if (contextRequest == 1)
             {
@@ -834,6 +850,7 @@ void EmuThread::run()
                 deinitOpenGL();
                 ContextRequest = 0;
             }
+#endif
         }
     }
 
@@ -2349,6 +2366,7 @@ QStringList MainWindow::splitArchivePath(const QString& filename, bool useMember
     return { filename };
 }
 
+#ifdef ARCHIVE_SUPPORT_ENABLED
 QString MainWindow::pickFileFromArchive(QString archiveFileName)
 {
     QVector<QString> archiveROMList = Archive::ListArchive(archiveFileName);
@@ -2396,6 +2414,7 @@ QString MainWindow::pickFileFromArchive(QString archiveFileName)
 
     return QString();
 }
+#endif
 
 QStringList MainWindow::pickROM(bool gba)
 {
@@ -2929,7 +2948,9 @@ void MainWindow::onOpenTitleManager()
 
 void MainWindow::onMPNewInstance()
 {
-    //QProcess::startDetached(QApplication::applicationFilePath());
+#if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
+    QProcess::startDetached(QApplication::applicationFilePath(), QApplication::arguments().mid(1, QApplication::arguments().length() - 1));
+#else
     QProcess newinst;
     newinst.setProgram(QApplication::applicationFilePath());
     newinst.setArguments(QApplication::arguments().mid(1, QApplication::arguments().length()-1));
@@ -2942,6 +2963,7 @@ void MainWindow::onMPNewInstance()
 #endif
 
     newinst.startDetached();
+#endif
 }
 
 void MainWindow::onOpenEmuSettings()
@@ -3444,13 +3466,11 @@ int main(int argc, char** argv)
 
 #define SANITIZE(var, min, max)  { var = std::clamp(var, min, max); }
     SANITIZE(Config::ConsoleType, 0, 1);
-    SANITIZE(Config::_3DRenderer,
-    0,
-    0 // Minimum, Software renderer
-    #ifdef OGLRENDERER_ENABLED
-    + 1 // OpenGL Renderer
-    #endif
-    );
+#ifdef OGLRENDERER_ENABLED
+    SANITIZE(Config::_3DRenderer, 0, 1); // OpenGL Renderer
+#else
+    SANITIZE(Config::_3DRenderer, 0, 0); // Minimum, Software renderer
+#endif
     SANITIZE(Config::ScreenVSyncInterval, 1, 20);
     SANITIZE(Config::GL_ScaleFactor, 1, 16);
     SANITIZE(Config::AudioInterp, 0, 3);

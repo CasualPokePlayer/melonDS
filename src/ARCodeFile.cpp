@@ -21,6 +21,10 @@
 #include "ARCodeFile.h"
 #include "Platform.h"
 
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
+
 
 // TODO: import codes from other sources (usrcheat.dat, ...)
 // TODO: more user-friendly error reporting

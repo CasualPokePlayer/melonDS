@@ -23,6 +23,10 @@
 #include "GPU.h"
 #include "FIFO.h"
 
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
+
 
 // 3D engine notes
 //

@@ -16,8 +16,20 @@ constexpr T log2p1(T x) noexcept {
         return 0;
 #ifdef _MSC_VER
     unsigned long index = 0;
+#ifdef _WIN64
     _BitScanReverse64(&index, x);
-    return static_cast<T>(index) + 1;
+    return static_cast<T>(index + 1);
+#else
+    if constexpr (sizeof(T) == 8)
+    {
+        if (_BitScanReverse(&index, x))
+            return static_cast<T>(index + 1);
+        _BitScanReverse(&index, x >> 32);
+        return static_cast<T>(index + 32 + 1);
+    }
+    _BitScanReverse(&index, x);
+    return static_cast<T>(index + 1);
+#endif
 #else
     return static_cast<T>(std::numeric_limits<unsigned long long>::digits - __builtin_clzll(x));
 #endif

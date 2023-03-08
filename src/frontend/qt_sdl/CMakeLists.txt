@@ -26,7 +26,6 @@ set(SOURCES_QT_SDL
     TitleManagerDialog.cpp
     Input.cpp
     LAN_PCap.cpp
-    LAN_Socket.cpp
 	LocalMP.cpp
     OSD.cpp
     OSD_shaders.h
@@ -36,9 +35,6 @@ set(SOURCES_QT_SDL
     ROMManager.cpp
 	SaveManager.cpp
 	CameraManager.cpp
-    
-    ArchiveUtil.h
-    ArchiveUtil.cpp
 
     ../Util_Video.cpp
     ../Util_Audio.cpp
@@ -79,15 +75,38 @@ if (BUILD_STATIC)
     list(APPEND PKG_CONFIG_EXECUTABLE "--static")
 endif()
 
-pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
-pkg_check_modules(Slirp REQUIRED IMPORTED_TARGET slirp)
-pkg_check_modules(LibArchive REQUIRED IMPORTED_TARGET libarchive)
+find_package(SDL2 REQUIRED)
+set(SDL2_LINK_LIBS SDL2::SDL2-static)
 
-fix_interface_includes(PkgConfig::SDL2 PkgConfig::Slirp PkgConfig::LibArchive)
+pkg_check_modules(SLIRP IMPORTED_TARGET slirp)
+if (SLIRP_FOUND)
+    option(ENABLE_LIBSLIRP "Enable use of libslirp for network sockets" ON)
+else()
+    option(ENABLE_LIBSLIRP "Enable use of libslirp for network sockets" OFF)
+    message(WARNING "libslirp was not found. Indirect-mode networking will be unavailable in this build.")
+endif()
 
-add_compile_definitions(ARCHIVE_SUPPORT_ENABLED)
+pkg_check_modules(LibArchive IMPORTED_TARGET libarchive)
+if (LibArchive_FOUND)
+    option(ENABLE_LIBARCHIVE "Enable use of libarchive for archive support" ON)
+else()
+    option(ENABLE_LIBARCHIVE "Enable use of libarchive for archive support" OFF)
+    message(WARNING "libarchive was not found. Archive support will be unavailable in this build.")
+endif()
 
 add_executable(melonDS ${SOURCES_QT_SDL})
+
+if (ENABLE_LIBSLIRP)
+    fix_interface_includes(PkgConfig::Slirp)
+    target_compile_definitions(melonDS PRIVATE -DHAVE_LIBSLIRP)
+    target_sources(melonDS PRIVATE LAN_Socket.cpp)
+endif()
+
+if (ENABLE_LIBARCHIVE)
+    fix_interface_includes(PkgConfig::LibArchive)
+    target_compile_definitions(melonDS PRIVATE -DARCHIVE_SUPPORT_ENABLED)
+    target_sources(melonDS PRIVATE ArchiveUtil.h ArchiveUtil.cpp)
+endif()
 
 if (WIN32)
     target_link_libraries(melonDS PUBLIC opengl32)
@@ -131,7 +150,15 @@ endif()
 
 
 if (BUILD_STATIC)
-    qt_import_plugins(melonDS INCLUDE Qt::QSvgPlugin)
+    if (Qt5_VERSION VERSION_LESS 5.14)
+        set_property(TARGET melonDS APPEND PROPERTY QT_PLUGINS Qt5::QSvgPlugin Qt5::QWindowsIntegrationPlugin)
+        #target_link_libraries(melonDS PRIVATE ${Qt5Gui_PLUGINS})
+        target_link_libraries(Qt5::Gui INTERFACE ${Qt5Gui_PLUGINS})
+        set(QT_LINK_LIBS "${QT_LINK_LIBS};${_qt5Widgets_install_prefix}/lib/Qt5PlatformSupport.lib")
+        set(QT_LINK_LIBS "${QT_LINK_LIBS};${_qt5Widgets_install_prefix}/lib/qtpcre.lib")
+    else()
+        qt_import_plugins(melonDS INCLUDE Qt::QSvgPlugin)
+    endif()
     target_link_options(melonDS PRIVATE -static)
 endif()
 
@@ -144,7 +171,13 @@ else()
     target_include_directories(melonDS PUBLIC ${Qt5Gui_PRIVATE_INCLUDE_DIRS})
 endif()
 target_link_libraries(melonDS PRIVATE core)
-target_link_libraries(melonDS PRIVATE PkgConfig::SDL2 PkgConfig::Slirp PkgConfig::LibArchive)
+target_link_libraries(melonDS PRIVATE ${SDL2_LINK_LIBS})
+if (ENABLE_LIBSLIRP)
+    target_link_libraries(melonDS PRIVATE PkgConfig::Slirp)
+endif()
+if (ENABLE_LIBARCHIVE)
+    target_link_libraries(melonDS PRIVATE PkgConfig::LibArchive)
+endif()
 target_link_libraries(melonDS PRIVATE ${QT_LINK_LIBS} ${CMAKE_DL_LIBS})
 
 if (UNIX)
@@ -155,6 +188,10 @@ elseif (WIN32)
     configure_file("${CMAKE_SOURCE_DIR}/res/melon.rc.in" "${CMAKE_BINARY_DIR}/res/melon.rc")
     target_sources(melonDS PUBLIC "${CMAKE_BINARY_DIR}/res/melon.rc")
     target_include_directories(melonDS PRIVATE "${CMAKE_BINARY_DIR}/res")
+
+    if (MSVC)
+        target_link_options(melonDS PRIVATE /MANIFEST:NO /SUBSYSTEM:WINDOWS)
+    endif()
 
     if (${ARCHITECTURE} STREQUAL x86_64)
         set(WIN32_ARCHITECTURE amd64)

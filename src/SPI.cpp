@@ -295,11 +295,28 @@ void LoadFirmwareFromFile(FILE* f, bool makecopy)
     }
 }
 
+static std::u16string ConvertUTF8ToUTF16(std::string& orig)
+{
+#ifdef _WIN32
+    std::u16string ret{};
+    int wclen = MultiByteToWideChar(CP_UTF8, 0, orig.c_str(), -1, nullptr, 0);
+    if (wclen)
+    {
+        auto buffer = std::make_unique<char16_t[]>(wclen);
+        MultiByteToWideChar(CP_UTF8, 0, orig.c_str(), -1, (LPWSTR)buffer.get(), wclen);
+        ret.assign(buffer.get(), wclen / sizeof(char16_t));
+    }
+    return ret;
+#else
+    return std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(orig);
+#endif
+}
+
 void LoadUserSettingsFromConfig()
 {
     // setting up username
     std::string orig_username = Platform::GetConfigString(Platform::Firm_Username);
-    std::u16string username = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(orig_username);
+    std::u16string username = ConvertUTF8ToUTF16(orig_username);
     size_t usernameLength = std::min(username.length(), (size_t) 10);
     memcpy(Firmware + UserSettings + 0x06, username.data(), usernameLength * sizeof(char16_t));
     Firmware[UserSettings+0x1A] = usernameLength;
@@ -316,7 +333,7 @@ void LoadUserSettingsFromConfig()
 
     // setup message
     std::string orig_message = Platform::GetConfigString(Platform::Firm_Message);
-    std::u16string message = std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t>{}.from_bytes(orig_message);
+    std::u16string message = ConvertUTF8ToUTF16(orig_message);
     size_t messageLength = std::min(message.length(), (size_t) 26);
     memcpy(Firmware + UserSettings + 0x1C, message.data(), messageLength * sizeof(char16_t));
     Firmware[UserSettings+0x50] = messageLength;

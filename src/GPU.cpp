@@ -27,6 +27,10 @@
 
 #include "GPU2D_Soft.h"
 
+#ifdef _MSC_VER
+#include "MSVC_Compat.h"
+#endif
+
 namespace GPU
 {
 
